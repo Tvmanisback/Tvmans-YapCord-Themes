@@ -465,12 +465,24 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     // These are public browser settings. Never put a Supabase secret/service-role key here.
     const SUPABASE_URL = "https://qewsuobnznijesymviwi.supabase.co";
     const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_xprGz3h5bn-B0iAI6Vac3A_w73kpdc5";
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+    let supabase = null;
+    const supabaseReady = import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm")
+      .then(({ createClient }) => {
+        supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+        supabase.auth.onAuthStateChange((_event, session) => {
+          currentUser = session ? session.user : null;
+          updateAuthButtons();
+        });
+        return supabase;
+      })
+      .catch(error => {
+        console.error("Could not load Supabase SDK:", error);
+        return null;
+      });
     const MAX_THEME_BYTES = 500 * 1024;
     let authMode = "login";
     let currentUser = null;
@@ -526,14 +538,12 @@
       document.getElementById("logout-button").classList.toggle("hidden", !signedIn);
     }
     async function checkSession() {
-      const { data, error } = await supabase.auth.getUser();
+      const client = await supabaseReady;
+      if (!client) { updateAuthButtons(); return; }
+      const { data, error } = await client.auth.getUser();
       currentUser = error ? null : data.user;
       updateAuthButtons();
     }
-    supabase.auth.onAuthStateChange((_event, session) => {
-      currentUser = session ? session.user : null;
-      updateAuthButtons();
-    });
 
     document.getElementById("auth-form").addEventListener("submit", async event => {
       event.preventDefault();
@@ -542,6 +552,8 @@
       const email = document.getElementById("auth-email").value.trim();
       const password = document.getElementById("auth-password").value;
       try {
+        const client = await supabaseReady;
+        if (!client) throw new Error("Supabase could not load. Check your internet connection or try refreshing the page.");
         if (authMode === "signup") {
           const username = document.getElementById("auth-username").value.trim();
           const { data, error } = await supabase.auth.signUp({
@@ -570,7 +582,9 @@
     });
 
     async function logout() {
-      const { error } = await supabase.auth.signOut();
+      const client = await supabaseReady;
+      if (!client) { toast("Supabase could not load. Check your connection and refresh."); return; }
+      const { error } = await client.auth.signOut();
       if (error) { toast(errorMessage(error)); return; }
       currentUser = null;
       updateAuthButtons();
@@ -615,16 +629,18 @@
           toast("Log in before uploading a community theme.");
           return;
         }
+        const client = await supabaseReady;
+        if (!client) throw new Error("Supabase could not load. Check your internet connection or try refreshing the page.");
         const name = document.getElementById("upload-name").value.trim();
         const description = document.getElementById("upload-description").value.trim();
         const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
         const storagePath = currentUser.id + "/" + crypto.randomUUID() + "-" + safeFileName;
-        const { error: storageError } = await supabase.storage
+        const { error: storageError } = await client.storage
           .from("themes")
           .upload(storagePath, file, { contentType: "text/css", upsert: false });
         if (storageError) throw storageError;
-        const { data: publicData } = supabase.storage.from("themes").getPublicUrl(storagePath);
-        const { error: insertError } = await supabase.from("themes").insert({
+        const { data: publicData } = client.storage.from("themes").getPublicUrl(storagePath);
+        const { error: insertError } = await client.from("themes").insert({
           name,
           description,
           author_id: currentUser.id,
