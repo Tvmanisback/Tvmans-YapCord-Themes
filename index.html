@@ -388,6 +388,9 @@
     <div class="tabs">
       <button class="tab active" data-tab="tvmans" onclick="switchTab('tvmans')">Tvman’s Themes</button>
       <button class="tab" data-tab="community" onclick="switchTab('community')">Community Themes</button>
+      <button class="tab" data-tab="yours" onclick="switchTab('yours')">Your Themes</button>
+      <button class="tab" data-tab="accounts" onclick="switchTab('accounts')">Accounts</button>
+      <button class="tab" data-tab="settings" onclick="switchTab('settings')">Account Settings</button>
     </div>
 
     <!-- Tvman's Themes -->
@@ -425,6 +428,30 @@
         </div>
       </div>
     </div>
+
+    <div class="panel" id="panel-yours">
+      <div id="your-themes-list"><div class="empty"><h3>Your Themes</h3><p>Log in to manage the themes you uploaded.</p></div></div>
+    </div>
+
+    <div class="panel" id="panel-accounts">
+      <div class="community-toolbar">
+        <input id="account-search" type="search" placeholder="Search accounts…" aria-label="Search accounts">
+        <button class="btn btn-outline" onclick="loadAccounts()">Refresh</button>
+      </div>
+      <div id="accounts-list"><div class="empty"><h3>Community accounts</h3><p>Browse creators in the YapCord Themes community.</p></div></div>
+    </div>
+
+    <div class="panel" id="panel-settings">
+      <div class="card">
+        <h2 style="margin-bottom:1rem">Account Settings</h2>
+        <p class="theme-desc" id="settings-email">Log in to edit your account settings.</p>
+        <form id="settings-form">
+          <label>Username<input id="settings-username" type="text" minlength="3" maxlength="24" pattern="[A-Za-z0-9_]+" required placeholder="YapCord username"></label>
+          <label>New password (optional)<input id="settings-password" type="password" minlength="8" maxlength="128" autocomplete="new-password" placeholder="Leave blank to keep your password"></label>
+          <button class="btn btn-primary full-width" type="submit" id="settings-submit">Save settings</button>
+        </form>
+      </div>
+    </div>
   </main>
 
   <footer>
@@ -453,8 +480,10 @@
       <h2 id="upload-title">Upload a theme</h2>
       <p class="modal-subtitle">Share a <code>.theme.css</code> file with the community.</p>
       <form id="upload-form">
+        <p class="fine-print">The file's metadata comment will be used automatically when present. You can review or edit the detected name and description below.</p>
         <label>Theme name<input id="upload-name" type="text" required minlength="2" maxlength="60" placeholder="Midnight Crimson"></label>
         <label>Description<textarea id="upload-description" rows="3" maxlength="240" placeholder="What makes your theme special?"></textarea></label>
+        <p class="fine-print" id="theme-metadata-status">Choose a .theme.css file to detect its metadata.</p>
         <label>Theme file (.theme.css)<input id="theme-file" type="file" accept=".theme.css,text/css" required></label>
         <p class="fine-print">Only CSS theme files are accepted (maximum 500 KB). Uploaded CSS can change page styles, so only install themes you trust.</p>
         <button class="btn btn-primary full-width" type="submit" id="upload-submit">Upload theme</button>
@@ -488,6 +517,9 @@
     let currentUser = null;
     let toastTimer = null;
     let communityThemes = [];
+    let ownedThemes = [];
+    let communityAccounts = [];
+    let parsedThemeMetadata = null;
 
     function toast(message) {
       const el = document.getElementById("toast");
@@ -530,12 +562,28 @@
       document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
       document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + name));
       if (name === "community") loadCommunityThemes();
+      if (name === "yours") loadYourThemes();
+      if (name === "accounts") loadAccounts();
+      if (name === "settings") checkSession();
     }
     function updateAuthButtons() {
       const signedIn = Boolean(currentUser);
       document.getElementById("login-button").classList.toggle("hidden", signedIn);
       document.getElementById("signup-button").classList.toggle("hidden", signedIn);
       document.getElementById("logout-button").classList.toggle("hidden", !signedIn);
+      document.querySelectorAll('[data-tab="yours"], [data-tab="settings"]').forEach(button => {
+        button.classList.toggle("hidden", !signedIn);
+      });
+      if (!signedIn) {
+        const settingsEmail = document.getElementById("settings-email");
+        if (settingsEmail) settingsEmail.textContent = "Log in to edit your account settings.";
+      } else {
+        const settingsEmail = document.getElementById("settings-email");
+        if (settingsEmail) settingsEmail.textContent = "Signed in as " + (currentUser.email || "your account") + ".";
+        const username = currentUser.user_metadata && currentUser.user_metadata.username;
+        const input = document.getElementById("settings-username");
+        if (input && username && !input.value) input.value = username;
+      }
     }
     async function checkSession() {
       const client = await supabaseReady;
@@ -556,7 +604,7 @@
         if (!client) throw new Error("Supabase could not load. Check your internet connection or try refreshing the page.");
         if (authMode === "signup") {
           const username = document.getElementById("auth-username").value.trim();
-          const { data, error } = await supabase.auth.signUp({
+          const { data, error } = await client.auth.signUp({
             email, password,
             options: { data: { username } }
           });
@@ -566,7 +614,7 @@
           closeModal("auth-modal");
           toast(data.session ? "Account created!" : "Account created! Check your email to confirm it, then log in.");
         } else {
-          const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+          const { data, error } = await client.auth.signInWithPassword({ email, password });
           if (error) throw error;
           currentUser = data.user;
           updateAuthButtons();
@@ -598,13 +646,48 @@
       if (file.size === 0) throw new Error("That file is empty.");
       return file;
     }
+    function parseThemeMetadata(css) {
+      const match = css.match(/\/\*([\s\S]*?)\*\//);
+      if (!match) return { name: "", author: "", version: "", description: "" };
+      const block = match[1];
+      const fields = {};
+      block.split(/\r?\n/).forEach(line => {
+        const clean = line.trim().replace(/^\*\s?/, "").trim();
+        const field = clean.match(/^@(name|author|version|description)\s+(.+)$/i);
+        if (field) fields[field[1].toLowerCase()] = field[2].trim();
+      });
+      return {
+        name: fields.name || "",
+        author: fields.author || "",
+        version: fields.version || "",
+        description: fields.description || ""
+      };
+    }
     async function readThemeFile(file) {
       validateThemeFile(file);
       const css = await file.text();
       if (!css.trim()) throw new Error("That file does not contain CSS.");
       if (/<\/?script\b|javascript:|expression\s*\(/i.test(css)) throw new Error("This CSS contains blocked unsafe content.");
+      parsedThemeMetadata = parseThemeMetadata(css);
       return css;
     }
+    document.getElementById("theme-file").addEventListener("change", async event => {
+      const file = event.target.files[0];
+      if (!file) return;
+      try {
+        await readThemeFile(file);
+        const meta = parsedThemeMetadata || {};
+        if (meta.name) document.getElementById("upload-name").value = meta.name.slice(0, 60);
+        if (meta.description) document.getElementById("upload-description").value = meta.description.slice(0, 240);
+        const status = document.getElementById("theme-metadata-status");
+        status.textContent = meta.name || meta.author || meta.version || meta.description
+          ? "Detected metadata — Name: " + (meta.name || "not set") + " · Author: " + (meta.author || "not set") + " · Version: " + (meta.version || "not set")
+          : "No metadata comment found. Add @name, @author, @version and @description inside a /* ... */ comment.";
+      } catch (error) {
+        parsedThemeMetadata = null;
+        document.getElementById("theme-metadata-status").textContent = errorMessage(error);
+      }
+    });
     async function downloadLocalTheme() {
       try {
         const file = document.getElementById("theme-file").files[0];
@@ -631,8 +714,11 @@
         }
         const client = await supabaseReady;
         if (!client) throw new Error("Supabase could not load. Check your internet connection or try refreshing the page.");
-        const name = document.getElementById("upload-name").value.trim();
-        const description = document.getElementById("upload-description").value.trim();
+        const name = (parsedThemeMetadata && parsedThemeMetadata.name || document.getElementById("upload-name").value).trim();
+        const description = (parsedThemeMetadata && parsedThemeMetadata.description || document.getElementById("upload-description").value).trim();
+        if (!name) throw new Error("Add @name to the CSS metadata or enter a theme name.");
+        const themeAuthor = (parsedThemeMetadata && parsedThemeMetadata.author || currentUser.user_metadata?.username || currentUser.email || "Community member").trim();
+        const themeVersion = (parsedThemeMetadata && parsedThemeMetadata.version || "Unversioned").trim();
         const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
         const storagePath = currentUser.id + "/" + crypto.randomUUID() + "-" + safeFileName;
         const { error: storageError } = await client.storage
@@ -644,11 +730,15 @@
           name,
           description,
           author_id: currentUser.id,
-          file_url: publicData.publicUrl
+          file_url: publicData.publicUrl,
+          theme_author: themeAuthor,
+          version: themeVersion
         });
         if (insertError) throw insertError;
         closeModal("upload-modal");
         document.getElementById("upload-form").reset();
+        parsedThemeMetadata = null;
+        document.getElementById("theme-metadata-status").textContent = "Choose a .theme.css file to detect its metadata.";
         toast("Theme uploaded to the community!");
         switchTab("community");
       } catch (error) {
@@ -668,7 +758,7 @@
       }
       const { data, error } = await client
         .from("themes")
-        .select("id,name,description,file_url,created_at")
+        .select("id,name,description,file_url,created_at,author_id,theme_author,version")
         .order("created_at", { ascending: false });
       if (error) {
         list.innerHTML = '<div class="empty"><h3>Could not load themes</h3><p></p></div>';
@@ -679,7 +769,10 @@
         id: theme.id,
         name: theme.name,
         description: theme.description,
-        author: "Community member",
+        author: theme.theme_author || "Community member",
+        version: theme.version || "Unversioned",
+        authorId: theme.author_id,
+        fileUrl: theme.file_url,
         downloadUrl: theme.file_url
       }));
       renderCommunityThemes();
@@ -701,7 +794,7 @@
       filtered.forEach(theme => {
         const card = document.createElement("article"); card.className = "card community-card";
         const title = document.createElement("div"); title.className = "theme-name"; title.textContent = theme.name || "Untitled theme";
-        const badge = document.createElement("span"); badge.className = "badge"; badge.textContent = "Community"; title.appendChild(badge);
+        const badge = document.createElement("span"); badge.className = "badge"; badge.textContent = theme.version || "Community"; title.appendChild(badge);
         const desc = document.createElement("p"); desc.className = "theme-desc";
         desc.textContent = (theme.description || "No description provided.") + " · by " + (theme.author || "Community member");
         const actions = document.createElement("div"); actions.className = "card-actions";
@@ -712,6 +805,160 @@
       });
     }
     document.getElementById("theme-search").addEventListener("input", renderCommunityThemes);
+
+    function requireLoginForPanel(panelName) {
+      if (currentUser) return true;
+      toast("Log in to use " + panelName + ".");
+      openAuth("login");
+      return false;
+    }
+
+    async function loadYourThemes() {
+      const list = document.getElementById("your-themes-list");
+      if (!requireLoginForPanel("Your Themes")) {
+        list.innerHTML = '<div class="empty"><h3>Log in required</h3><p>Log in to view and delete themes you uploaded.</p></div>';
+        return;
+      }
+      const client = await supabaseReady;
+      if (!client) { list.innerHTML = '<div class="empty"><h3>Could not connect</h3><p>Refresh the page and try again.</p></div>'; return; }
+      list.innerHTML = '<div class="empty"><h3>Loading your themes…</h3></div>';
+      const { data, error } = await client.from("themes")
+        .select("id,name,description,file_url,created_at,author_id,theme_author,version")
+        .eq("author_id", currentUser.id)
+        .order("created_at", { ascending: false });
+      if (error) {
+        list.innerHTML = '<div class="empty"><h3>Could not load your themes</h3><p></p></div>';
+        list.querySelector("p").textContent = errorMessage(error) + " Check the themes table columns and policies.";
+        return;
+      }
+      ownedThemes = data || [];
+      if (!ownedThemes.length) {
+        list.innerHTML = '<div class="empty"><div class="empty-icon">✦</div><h3>You have not uploaded any themes</h3><p>Upload a .theme.css file to see it here.</p></div>';
+        return;
+      }
+      list.replaceChildren();
+      ownedThemes.forEach(theme => {
+        const card = document.createElement("article"); card.className = "card community-card";
+        const title = document.createElement("div"); title.className = "theme-name"; title.textContent = theme.name || "Untitled theme";
+        const badge = document.createElement("span"); badge.className = "badge"; badge.textContent = theme.version || "Unversioned"; title.appendChild(badge);
+        const desc = document.createElement("p"); desc.className = "theme-desc";
+        desc.textContent = (theme.description || "No description provided.") + " · by " + (theme.theme_author || "Unknown author");
+        const actions = document.createElement("div"); actions.className = "card-actions";
+        const download = document.createElement("a"); download.className = "btn btn-outline"; download.textContent = "Download";
+        download.href = theme.file_url; download.target = "_blank"; download.rel = "noopener noreferrer";
+        const del = document.createElement("button"); del.className = "btn btn-primary"; del.textContent = "Delete";
+        del.addEventListener("click", () => deleteOwnedTheme(theme));
+        actions.append(download, del); card.append(title, desc, actions); list.appendChild(card);
+      });
+    }
+
+    async function deleteOwnedTheme(theme) {
+      if (!currentUser || theme.author_id !== currentUser.id) {
+        toast("You can only delete themes you uploaded.");
+        return;
+      }
+      if (!confirm('Delete "' + (theme.name || "this theme") + '"? This cannot be undone.')) return;
+      const client = await supabaseReady;
+      if (!client) { toast("Supabase could not load. Refresh and try again."); return; }
+      try {
+        const marker = "/storage/v1/object/public/themes/";
+        const index = (theme.file_url || "").indexOf(marker);
+        if (index >= 0) {
+          const storagePath = decodeURIComponent(theme.file_url.slice(index + marker.length).split("?")[0]);
+          const { error: storageError } = await client.storage.from("themes").remove([storagePath]);
+          if (storageError) console.warn("Theme storage cleanup failed:", storageError.message);
+        }
+        const { error } = await client.from("themes").delete().eq("id", theme.id).eq("author_id", currentUser.id);
+        if (error) throw error;
+        toast("Theme deleted.");
+        await loadYourThemes();
+        await loadCommunityThemes();
+      } catch (error) { toast(errorMessage(error)); }
+    }
+
+    async function loadAccounts() {
+      const list = document.getElementById("accounts-list");
+      const client = await supabaseReady;
+      if (!client) { list.innerHTML = '<div class="empty"><h3>Could not connect</h3><p>Refresh the page and try again.</p></div>'; return; }
+      list.innerHTML = '<div class="empty"><h3>Loading accounts…</h3></div>';
+      const { data, error } = await client.from("profiles").select("id,username,created_at").order("username");
+      if (error) {
+        list.innerHTML = '<div class="empty"><h3>Could not load accounts</h3><p></p></div>';
+        list.querySelector("p").textContent = errorMessage(error) + " The profiles table and its read policy must be set up.";
+        return;
+      }
+      communityAccounts = data || [];
+      renderAccounts();
+    }
+
+    function renderAccounts() {
+      const list = document.getElementById("accounts-list");
+      const query = document.getElementById("account-search").value.trim().toLowerCase();
+      const filtered = communityAccounts.filter(account => (account.username || "").toLowerCase().includes(query));
+      if (!filtered.length) {
+        list.innerHTML = '<div class="empty"><h3>No accounts found</h3><p>Try another username.</p></div>';
+        return;
+      }
+      list.replaceChildren();
+      filtered.forEach(account => {
+        const card = document.createElement("article"); card.className = "card community-card";
+        const title = document.createElement("div"); title.className = "theme-name"; title.textContent = account.username || "YapCord member";
+        const badge = document.createElement("span"); badge.className = "badge"; badge.textContent = "Account"; title.appendChild(badge);
+        const desc = document.createElement("p"); desc.className = "theme-desc";
+        desc.textContent = "Member since " + new Date(account.created_at).toLocaleDateString();
+        const actions = document.createElement("div"); actions.className = "card-actions";
+        const themes = document.createElement("button"); themes.className = "btn btn-outline"; themes.textContent = "View themes";
+        themes.addEventListener("click", () => {
+          switchTab("community");
+          document.getElementById("theme-search").value = "";
+          renderCommunityThemes();
+          const matches = communityThemes.filter(t => t.authorId === account.id);
+          const target = document.getElementById("community-list");
+          if (!matches.length) { target.innerHTML = '<div class="empty"><h3>No public themes yet</h3><p>This account has not uploaded a theme.</p></div>'; return; }
+          target.replaceChildren();
+          matches.forEach(theme => {
+            const item = document.createElement("article"); item.className = "card community-card";
+            const name = document.createElement("div"); name.className = "theme-name"; name.textContent = theme.name;
+            const version = document.createElement("span"); version.className = "badge"; version.textContent = theme.version; name.appendChild(version);
+            const description = document.createElement("p"); description.className = "theme-desc"; description.textContent = (theme.description || "No description provided.") + " · by " + theme.author;
+            const download = document.createElement("a"); download.className = "btn btn-primary"; download.textContent = "Download .theme.css"; download.href = theme.downloadUrl; download.target = "_blank"; download.rel = "noopener noreferrer";
+            const actions = document.createElement("div"); actions.className = "card-actions"; actions.appendChild(download);
+            item.append(name, description, actions); target.appendChild(item);
+          });
+        });
+        actions.appendChild(themes); card.append(title, desc, actions); list.appendChild(card);
+      });
+    }
+
+    document.getElementById("account-search").addEventListener("input", renderAccounts);
+
+    document.getElementById("settings-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!requireLoginForPanel("account settings")) return;
+      const submit = document.getElementById("settings-submit");
+      submit.disabled = true;
+      try {
+        const client = await supabaseReady;
+        if (!client) throw new Error("Supabase could not load. Refresh and try again.");
+        const username = document.getElementById("settings-username").value.trim();
+        const password = document.getElementById("settings-password").value;
+        const { error: authError } = await client.auth.updateUser({
+          data: { username },
+          ...(password ? { password } : {})
+        });
+        if (authError) throw authError;
+        const { error: profileError } = await client.from("profiles").upsert({
+          id: currentUser.id, username
+        }, { onConflict: "id" });
+        if (profileError) throw profileError;
+        currentUser = (await client.auth.getUser()).data.user || currentUser;
+        document.getElementById("settings-password").value = "";
+        toast("Account settings saved.");
+        await loadAccounts();
+      } catch (error) { toast(errorMessage(error)); }
+      finally { submit.disabled = false; }
+    });
+
     checkSession();
   </script>
 </body>
