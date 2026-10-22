@@ -320,6 +320,30 @@
       transform: translateX(-50%) translateY(0);
     }
 
+
+    .hidden { display: none !important; }
+    .community-toolbar { display: flex; gap: .6rem; margin-bottom: 1rem; }
+    .community-toolbar input { flex: 1; min-width: 0; }
+    input, textarea { width: 100%; border: 1px solid var(--border); border-radius: 9px; background: #0d0202; color: var(--text); padding: .75rem .85rem; font: inherit; font-size: .9rem; outline: none; }
+    input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    label { display: block; color: var(--text-muted); font-size: .82rem; font-weight: 600; margin-bottom: 1rem; }
+    label input, label textarea { display: block; margin-top: .45rem; }
+    textarea { resize: vertical; }
+    .modal-backdrop { display: none; position: fixed; inset: 0; z-index: 200; padding: 1rem; background: rgba(0,0,0,.78); backdrop-filter: blur(8px); align-items: center; justify-content: center; overflow-y: auto; }
+    .modal-backdrop.open { display: flex; }
+    .modal { position: relative; width: min(100%, 440px); max-height: calc(100vh - 2rem); overflow-y: auto; padding: 1.6rem; border: 1px solid var(--border); border-radius: 16px; background: #120303; box-shadow: 0 20px 80px #000a; }
+    .modal h2 { font-size: 1.35rem; margin-bottom: .4rem; }
+    .modal-subtitle { color: var(--text-muted); font-size: .9rem; margin-bottom: 1.4rem; line-height: 1.5; }
+    .modal-close { position: absolute; top: .7rem; right: .8rem; background: transparent; border: 0; color: var(--text-muted); font-size: 1.7rem; cursor: pointer; }
+    .full-width { width: 100%; margin: .2rem 0 .65rem; padding: .75rem; }
+    .modal-switch { text-align: center; color: var(--text-muted); font-size: .85rem; margin-top: .5rem; }
+    .text-button { border: 0; background: none; color: var(--accent-hover); cursor: pointer; font: inherit; font-weight: 600; }
+    .fine-print { color: var(--text-faint); font-size: .76rem; line-height: 1.5; margin: .5rem 0 1rem; }
+    .community-card { margin-bottom: 1rem; }
+    .btn:disabled { opacity: .55; cursor: wait; }
+    code { color: #ff9a9a; background: #240707; padding: .12rem .3rem; border-radius: 4px; }
+    @media (max-width: 520px) { .community-toolbar { flex-direction: column; } .modal { padding: 1.2rem; } }
+
     @media (max-width: 520px) {
       header {
         padding: 0.85rem 1rem;
@@ -341,7 +365,7 @@
       <span>Tvman’s YapCord Themes</span>
     </div>
     <div class="header-actions">
-      <button class="btn btn-primary" onclick="showComingSoon()">
+      <button class="btn btn-primary" onclick="openModal('upload-modal')">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
           <polyline points="17 8 12 3 7 8"/>
@@ -349,8 +373,9 @@
         </svg>
         Upload
       </button>
-      <button class="btn btn-ghost" onclick="showComingSoon()">Log in</button>
-      <button class="btn btn-outline" onclick="showComingSoon()">Sign up</button>
+      <button class="btn btn-ghost" id="login-button" onclick="openAuth('login')">Log in</button>
+      <button class="btn btn-outline" id="signup-button" onclick="openAuth('signup')">Sign up</button>
+      <button class="btn btn-outline hidden" id="logout-button" onclick="logout()">Log out</button>
     </div>
   </header>
 
@@ -388,10 +413,16 @@
 
     <!-- Community Themes -->
     <div class="panel" id="panel-community">
-      <div class="empty">
-        <div class="empty-icon">✦</div>
-        <h3>Coming Soon</h3>
-        <p>Community themes will appear here.</p>
+      <div class="community-toolbar">
+        <input id="theme-search" type="search" placeholder="Search community themes…" aria-label="Search community themes">
+        <button class="btn btn-outline" onclick="loadCommunityThemes()">Refresh</button>
+      </div>
+      <div id="community-list">
+        <div class="empty">
+          <div class="empty-icon">✦</div>
+          <h3>Community Themes</h3>
+          <p>Connect a backend to browse themes uploaded by the community.</p>
+        </div>
       </div>
     </div>
   </main>
@@ -400,24 +431,216 @@
     Made by <a href="#">Tvman</a> · for YapCord
   </footer>
 
-  <div class="toast" id="toast">Coming Soon</div>
+  <div class="modal-backdrop" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <div class="modal">
+      <button class="modal-close" onclick="closeModal('auth-modal')" aria-label="Close">×</button>
+      <h2 id="auth-title">Log in</h2>
+      <p class="modal-subtitle" id="auth-subtitle">Welcome back to YapCord Themes.</p>
+      <form id="auth-form">
+        <label>Email<input id="auth-email" type="email" autocomplete="email" required maxlength="254"></label>
+        <label>Password<input id="auth-password" type="password" autocomplete="current-password" required minlength="8" maxlength="128"></label>
+        <label id="username-field" class="hidden">Username<input id="auth-username" type="text" autocomplete="username" minlength="3" maxlength="24" pattern="[A-Za-z0-9_]+" placeholder="YapCord username"></label>
+        <button class="btn btn-primary full-width" id="auth-submit" type="submit">Log in</button>
+      </form>
+      <p class="modal-switch" id="auth-switch">New here? <button class="text-button" onclick="openAuth('signup')">Create an account</button></p>
+      <p class="fine-print">Your account is handled by the site's configured backend. Never share your password with anyone.</p>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="upload-modal" role="dialog" aria-modal="true" aria-labelledby="upload-title">
+    <div class="modal">
+      <button class="modal-close" onclick="closeModal('upload-modal')" aria-label="Close">×</button>
+      <h2 id="upload-title">Upload a theme</h2>
+      <p class="modal-subtitle">Share a <code>.theme.css</code> file with the community.</p>
+      <form id="upload-form">
+        <label>Theme name<input id="upload-name" type="text" required minlength="2" maxlength="60" placeholder="Midnight Crimson"></label>
+        <label>Description<textarea id="upload-description" rows="3" maxlength="240" placeholder="What makes your theme special?"></textarea></label>
+        <label>Theme file (.theme.css)<input id="theme-file" type="file" accept=".theme.css,text/css" required></label>
+        <p class="fine-print">Only CSS theme files are accepted (maximum 500 KB). Uploaded CSS can change page styles, so only install themes you trust.</p>
+        <button class="btn btn-primary full-width" type="submit" id="upload-submit">Upload theme</button>
+        <button class="btn btn-outline full-width" type="button" onclick="downloadLocalTheme()">Just validate & download my file</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script>
-    function showComingSoon() {
-      const toast = document.getElementById('toast');
-      toast.classList.add('show');
-      clearTimeout(window._toastTimer);
-      window._toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+    // Set this to your backend's HTTPS base URL, e.g. "https://your-api.example.com".
+    // Leave empty while building the backend; public uploads/accounts need a backend.
+    window.YAPCORD_API_BASE = window.YAPCORD_API_BASE || "";
+    const API_BASE = String(window.YAPCORD_API_BASE || "").replace(/\/$/, "");
+    const MAX_THEME_BYTES = 500 * 1024;
+    let authMode = "login";
+    let currentUser = null;
+    let toastTimer = null;
+    let communityThemes = [];
+
+    function toast(message) {
+      const el = document.getElementById("toast");
+      el.textContent = message;
+      el.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove("show"), 3000);
     }
+    function apiUrl(path) { return API_BASE + path; }
+    async function api(path, options = {}) {
+      if (!API_BASE) throw new Error("Backend not configured yet. Set YAPCORD_API_BASE when your API is ready.");
+      const response = await fetch(apiUrl(path), { credentials: "include", ...options });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || data.message || "Request failed (" + response.status + ")");
+      return data;
+    }
+    function openModal(id) { document.getElementById(id).classList.add("open"); }
+    function closeModal(id) { document.getElementById(id).classList.remove("open"); }
+    function openAuth(mode) {
+      authMode = mode;
+      const signup = mode === "signup";
+      document.getElementById("auth-title").textContent = signup ? "Create your account" : "Log in";
+      document.getElementById("auth-subtitle").textContent = signup ? "Join the YapCord Themes community." : "Welcome back to YapCord Themes.";
+      document.getElementById("auth-submit").textContent = signup ? "Sign up" : "Log in";
+      document.getElementById("username-field").classList.toggle("hidden", !signup);
+      document.getElementById("auth-username").required = signup;
+      document.getElementById("auth-password").autocomplete = signup ? "new-password" : "current-password";
+      document.getElementById("auth-switch").innerHTML = signup
+        ? 'Already have an account? <button class="text-button" type="button" onclick="openAuth(\'login\')">Log in</button>'
+        : 'New here? <button class="text-button" type="button" onclick="openAuth(\'signup\')">Create an account</button>';
+      openModal("auth-modal");
+    }
+    document.querySelectorAll(".modal-backdrop").forEach(backdrop => {
+      backdrop.addEventListener("click", event => { if (event.target === backdrop) backdrop.classList.remove("open"); });
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") document.querySelectorAll(".modal-backdrop.open").forEach(m => m.classList.remove("open"));
+    });
 
     function switchTab(name) {
-      document.querySelectorAll('.tab').forEach(t => {
-        t.classList.toggle('active', t.dataset.tab === name);
-      });
-      document.querySelectorAll('.panel').forEach(p => {
-        p.classList.toggle('active', p.id === 'panel-' + name);
+      document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+      document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + name));
+      if (name === "community") loadCommunityThemes();
+    }
+    function updateAuthButtons() {
+      const signedIn = Boolean(currentUser);
+      document.getElementById("login-button").classList.toggle("hidden", signedIn);
+      document.getElementById("signup-button").classList.toggle("hidden", signedIn);
+      document.getElementById("logout-button").classList.toggle("hidden", !signedIn);
+    }
+    async function checkSession() {
+      if (!API_BASE) return;
+      try {
+        const data = await api("/api/auth/me");
+        currentUser = data.user || null;
+        updateAuthButtons();
+      } catch (_) { currentUser = null; updateAuthButtons(); }
+    }
+    document.getElementById("auth-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const submit = document.getElementById("auth-submit");
+      submit.disabled = true;
+      try {
+        const payload = {
+          email: document.getElementById("auth-email").value.trim(),
+          password: document.getElementById("auth-password").value
+        };
+        if (authMode === "signup") payload.username = document.getElementById("auth-username").value.trim();
+        const data = await api("/api/auth/" + (authMode === "signup" ? "signup" : "login"), {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+        });
+        currentUser = data.user || null;
+        updateAuthButtons();
+        closeModal("auth-modal");
+        toast(authMode === "signup" ? "Account created!" : "Logged in!");
+        loadCommunityThemes();
+      } catch (error) { toast(error.message); }
+      finally { submit.disabled = false; }
+    });
+    async function logout() {
+      try { await api("/api/auth/logout", { method: "POST" }); currentUser = null; updateAuthButtons(); toast("Logged out."); }
+      catch (error) { toast(error.message); }
+    }
+    function validateThemeFile(file) {
+      if (!file) throw new Error("Choose a .theme.css file first.");
+      if (!file.name.toLowerCase().endsWith(".theme.css")) throw new Error("The filename must end with .theme.css.");
+      if (file.size > MAX_THEME_BYTES) throw new Error("Theme files must be 500 KB or smaller.");
+      if (file.size === 0) throw new Error("That file is empty.");
+      return file;
+    }
+    async function readThemeFile(file) {
+      validateThemeFile(file);
+      const css = await file.text();
+      if (!css.trim()) throw new Error("That file does not contain CSS.");
+      if (/<\/?script\b|javascript:|expression\s*\(/i.test(css)) throw new Error("This CSS contains blocked unsafe content.");
+      return css;
+    }
+    async function downloadLocalTheme() {
+      try {
+        const file = document.getElementById("theme-file").files[0];
+        await readThemeFile(file);
+        const url = URL.createObjectURL(file);
+        const a = document.createElement("a"); a.href = url; a.download = file.name; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        toast("Theme validated. Downloaded a copy.");
+      } catch (error) { toast(error.message); }
+    }
+    document.getElementById("upload-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const submit = document.getElementById("upload-submit");
+      submit.disabled = true;
+      try {
+        const file = validateThemeFile(document.getElementById("theme-file").files[0]);
+        await readThemeFile(file);
+        if (!currentUser) { closeModal("upload-modal"); openAuth("login"); toast("Log in before uploading a community theme."); return; }
+        const form = new FormData();
+        form.append("file", file);
+        form.append("name", document.getElementById("upload-name").value.trim());
+        form.append("description", document.getElementById("upload-description").value.trim());
+        await api("/api/themes", { method: "POST", body: form });
+        closeModal("upload-modal");
+        document.getElementById("upload-form").reset();
+        toast("Theme uploaded to the community!");
+        switchTab("community");
+      } catch (error) { toast(error.message); }
+      finally { submit.disabled = false; }
+    });
+    async function loadCommunityThemes() {
+      const list = document.getElementById("community-list");
+      if (!API_BASE) {
+        list.innerHTML = '<div class="empty"><div class="empty-icon">✦</div><h3>Backend needed for community uploads</h3><p>Once you add a backend, set <code>YAPCORD_API_BASE</code> and community themes will load here.</p></div>';
+        return;
+      }
+      list.innerHTML = '<div class="empty"><h3>Loading themes…</h3><p>Fetching community uploads.</p></div>';
+      try {
+        const data = await api("/api/themes");
+        communityThemes = Array.isArray(data.themes) ? data.themes : [];
+        renderCommunityThemes();
+      } catch (error) {
+        list.innerHTML = '<div class="empty"><h3>Could not load themes</h3><p></p></div>';
+        list.querySelector("p").textContent = error.message;
+      }
+    }
+    function renderCommunityThemes() {
+      const list = document.getElementById("community-list");
+      const query = document.getElementById("theme-search").value.trim().toLowerCase();
+      const filtered = communityThemes.filter(theme => (theme.name || "").toLowerCase().includes(query) || (theme.description || "").toLowerCase().includes(query) || (theme.author || "").toLowerCase().includes(query));
+      if (!filtered.length) {
+        list.innerHTML = '<div class="empty"><div class="empty-icon">✦</div><h3>No themes found</h3><p>Be the first to share a .theme.css file.</p></div>';
+        return;
+      }
+      list.replaceChildren();
+      filtered.forEach(theme => {
+        const card = document.createElement("article"); card.className = "card community-card";
+        const title = document.createElement("div"); title.className = "theme-name"; title.textContent = theme.name || "Untitled theme";
+        const badge = document.createElement("span"); badge.className = "badge"; badge.textContent = "Community"; title.appendChild(badge);
+        const desc = document.createElement("p"); desc.className = "theme-desc"; desc.textContent = (theme.description || "No description provided.") + " · by " + (theme.author || "Community member");
+        const actions = document.createElement("div"); actions.className = "card-actions";
+        const download = document.createElement("a"); download.className = "btn btn-primary"; download.textContent = "Download .theme.css";
+        download.href = theme.downloadUrl || theme.download_url || "#"; download.target = "_blank"; download.rel = "noopener noreferrer";
+        if (download.href.endsWith("#")) download.addEventListener("click", e => { e.preventDefault(); toast("This theme does not have a download URL."); });
+        actions.appendChild(download); card.append(title, desc, actions); list.appendChild(card);
       });
     }
+    document.getElementById("theme-search").addEventListener("input", renderCommunityThemes);
+    checkSession();
   </script>
 </body>
 </html>
