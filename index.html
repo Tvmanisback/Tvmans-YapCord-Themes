@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tvman’s YapCord Themes</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    :root {
+      --bg: #0a0000;
+      --bg-card: #140202;
+      --bg-hover: #1f0606;
+      --border: #3d1010;
+      --accent: #c41e1e;
+      --accent-hover: #e63939;
+      --accent-soft: rgba(196, 30, 30, 0.15);
+      --text: #f2e8e8;
+      --text-muted: #c9a0a0;
+      --text-faint: #8f6060;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      background-image:
+        radial-gradient(ellipse at top, rgba(196, 30, 30, 0.08) 0%, transparent 55%),
+        radial-gradient(ellipse at bottom right, rgba(139, 0, 0, 0.06) 0%, transparent 50%);
+    }
+
+    /* ========== HEADER ========== */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.75rem;
+      border-bottom: 1px solid var(--border);
+      background: rgba(10, 0, 0, 0.7);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      font-weight: 700;
+      font-size: 1.05rem;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-logo {
+      width: 34px;
+      height: 34px;
+      background: linear-gradient(135deg, var(--accent), #8b0000);
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.95rem;
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(196, 30, 30, 0.3);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      padding: 0.5rem 0.95rem;
+      border-radius: 9px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s, transform 0.15s, box-shadow 0.2s, color 0.2s;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      box-shadow: 0 4px 14px rgba(196, 30, 30, 0.4);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid transparent;
+    }
+
+    .btn-ghost:hover {
+      background: var(--bg-hover);
+      color: var(--text);
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+
+    .btn-outline:hover {
+      background: var(--bg-hover);
+      color: var(--text);
+      border-color: rgba(196, 30, 30, 0.4);
+    }
+
+    /* ========== MAIN ========== */
+    main {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+    }
+
+    .hero {
+      text-align: center;
+      margin-bottom: 2.25rem;
+    }
+
+    .hero h1 {
+      font-size: 1.85rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.45rem;
+    }
+
+    .hero p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+
+    /* ========== TABS ========== */
+    .tabs {
+      display: flex;
+      gap: 0.35rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.3rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 0.6rem 1rem;
+      border-radius: 9px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      font-family: inherit;
+      background: transparent;
+      color: var(--text-muted);
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tab:hover {
+      color: var(--text);
+    }
+
+    .tab.active {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(196, 30, 30, 0.3);
+    }
+
+    /* ========== THEME CARDS ========== */
+    .panel {
+      display: none;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.5rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .card:hover {
+      border-color: rgba(196, 30, 30, 0.45);
+      box-shadow: 0 0 0 1px rgba(196, 30, 30, 0.12);
+    }
+
+    .theme-name {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.3rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .badge {
+      font-size: 0.68rem;
+      font-weight: 600;
+      background: var(--accent-soft);
+      color: var(--accent-hover);
+      padding: 0.18rem 0.45rem;
+      border-radius: 5px;
+    }
+
+    .theme-desc {
+      color: var(--text-faint);
+      font-size: 0.875rem;
+      margin-bottom: 1.15rem;
+      line-height: 1.45;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 0.65rem;
+    }
+
+    .card-actions .btn {
+      flex: 1;
+      padding: 0.65rem 1rem;
+    }
+
+    /* Coming soon empty state */
+    .empty {
+      text-align: center;
+      padding: 3.5rem 1.5rem;
+      background: var(--bg-card);
+      border: 1px dashed var(--border);
+      border-radius: 14px;
+      color: var(--text-faint);
+    }
+
+    .empty-icon {
+      font-size: 2rem;
+      margin-bottom: 0.75rem;
+      opacity: 0.5;
+    }
+
+    .empty h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.35rem;
+    }
+
+    .empty p {
+      font-size: 0.875rem;
+    }
+
+    /* ========== FOOTER ========== */
+    footer {
+      text-align: center;
+      padding: 1.5rem;
+      font-size: 0.8rem;
+      color: var(--text-faint);
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* ========== TOAST ========== */
+    .toast {
+      position: fixed;
+      bottom: 1.75rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.7rem 1.35rem;
+      border-radius: 10px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s ease;
+      z-index: 100;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    @media (max-width: 520px) {
+      header {
+        padding: 0.85rem 1rem;
+      }
+      .brand span {
+        display: none;
+      }
+      .header-actions .btn {
+        padding: 0.45rem 0.7rem;
+        font-size: 0.8rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-logo">T</div>
+      <span>Tvman’s YapCord Themes</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-primary" onclick="showComingSoon()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        Upload
+      </button>
+      <button class="btn btn-ghost" onclick="showComingSoon()">Log in</button>
+      <button class="btn btn-outline" onclick="showComingSoon()">Sign up</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="hero">
+      <h1>YapCord Themes</h1>
+      <p>Dark, clean themes for YapCord.<br>Drop the .theme.css into your extension and go.</p>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="tvmans" onclick="switchTab('tvmans')">Tvman’s Themes</button>
+      <button class="tab" data-tab="community" onclick="switchTab('community')">Community Themes</button>
+    </div>
+
+    <!-- Tvman's Themes -->
+    <div class="panel active" id="panel-tvmans">
+      <div class="card">
+        <div class="theme-name">
+          Blood Red
+          <span class="badge">v1.0.0</span>
+        </div>
+        <p class="theme-desc">Deep blood-red dark theme with glowing crimson accents. Made for YapCord.</p>
+        <div class="card-actions">
+          <a class="btn btn-primary" href="https://github.com/Tvmanisback/Tvmans-YapCord-Themes/releases/download/1.0.0/bloodred.theme.css" download>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Download
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Community Themes -->
+    <div class="panel" id="panel-community">
+      <div class="empty">
+        <div class="empty-icon">✦</div>
+        <h3>Coming Soon</h3>
+        <p>Community themes will appear here.</p>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    Made by <a href="#">Tvman</a> · for YapCord
+  </footer>
+
+  <div class="toast" id="toast">Coming Soon</div>
+
+  <script>
+    function showComingSoon() {
+      const toast = document.getElementById('toast');
+      toast.classList.add('show');
+      clearTimeout(window._toastTimer);
+      window._toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+    }
+
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.tab === name);
+      });
+      document.querySelectorAll('.panel').forEach(p => {
+        p.classList.toggle('active', p.id === 'panel-' + name);
+      });
+    }
+  </script>
+</body>
+</html>
