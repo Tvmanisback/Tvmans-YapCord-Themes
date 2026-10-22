@@ -585,12 +585,24 @@
         if (input && username && !input.value) input.value = username;
       }
     }
+    async function ensureProfile(client) {
+      if (!currentUser || !client) return;
+      const username = (currentUser.user_metadata && currentUser.user_metadata.username) ||
+        (currentUser.email ? currentUser.email.split("@")[0] : "YapCordMember");
+      const { error } = await client.from("profiles").upsert(
+        { id: currentUser.id, username: username.slice(0, 24) },
+        { onConflict: "id", ignoreDuplicates: true }
+      );
+      if (error) console.warn("Could not create community profile:", error.message);
+    }
+
     async function checkSession() {
       const client = await supabaseReady;
       if (!client) { updateAuthButtons(); return; }
       const { data, error } = await client.auth.getUser();
       currentUser = error ? null : data.user;
       updateAuthButtons();
+      if (currentUser) await ensureProfile(client);
     }
 
     document.getElementById("auth-form").addEventListener("submit", async event => {
@@ -621,6 +633,7 @@
           closeModal("auth-modal");
           toast("Logged in!");
         }
+        if (currentUser) await ensureProfile(client);
         await loadCommunityThemes();
       } catch (error) {
         toast(errorMessage(error));
@@ -908,8 +921,9 @@
         desc.textContent = "Member since " + new Date(account.created_at).toLocaleDateString();
         const actions = document.createElement("div"); actions.className = "card-actions";
         const themes = document.createElement("button"); themes.className = "btn btn-outline"; themes.textContent = "View themes";
-        themes.addEventListener("click", () => {
+        themes.addEventListener("click", async () => {
           switchTab("community");
+          await loadCommunityThemes();
           document.getElementById("theme-search").value = "";
           renderCommunityThemes();
           const matches = communityThemes.filter(t => t.authorId === account.id);
