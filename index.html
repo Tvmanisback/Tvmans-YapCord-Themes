@@ -661,7 +661,12 @@
     async function loadCommunityThemes() {
       const list = document.getElementById("community-list");
       list.innerHTML = '<div class="empty"><h3>Loading themes…</h3><p>Fetching community uploads.</p></div>';
-      const { data, error } = await supabase
+      const client = await supabaseReady;
+      if (!client) {
+        list.innerHTML = '<div class="empty"><h3>Could not connect to Supabase</h3><p>Check your internet connection and refresh the page.</p></div>';
+        return;
+      }
+      const { data, error } = await client
         .from("themes")
         .select("id,name,description,file_url,created_at")
         .order("created_at", { ascending: false });
