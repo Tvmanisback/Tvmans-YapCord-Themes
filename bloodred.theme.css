@@ -60,3 +60,19 @@
 :root:not([data-theme="light"]) .main .status-dot.offline {
   box-shadow: 0 0 0 3px var(--bg-main), inset 0 0 0 3px #5c3030;
 }
+
+/* "Made by Tvman" watermark – bottom right, tiny + transparent */
+body::after {
+  content: "Made by Tvman";
+  position: fixed;
+  bottom: 10px;
+  right: 14px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  color: rgba(196, 30, 30, 0.35);
+  pointer-events: none;
+  z-index: 9999;
+  user-select: none;
+  font-family: inherit;
+}
