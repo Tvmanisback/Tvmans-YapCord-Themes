@@ -465,11 +465,12 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    // Set this to your backend's HTTPS base URL, e.g. "https://your-api.example.com".
-    // Leave empty while building the backend; public uploads/accounts need a backend.
-    window.YAPCORD_API_BASE = window.YAPCORD_API_BASE || "";
-    const API_BASE = String(window.YAPCORD_API_BASE || "").replace(/\/$/, "");
+    // These are public browser settings. Never put a Supabase secret/service-role key here.
+    const SUPABASE_URL = "https://qewsuobnznijesymviwi.supabase.co";
+    const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_xprGz3h5bn-B0iAI6Vac3A_w73kpdc5";
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
     const MAX_THEME_BYTES = 500 * 1024;
     let authMode = "login";
     let currentUser = null;
@@ -483,13 +484,12 @@
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => el.classList.remove("show"), 3000);
     }
-    function apiUrl(path) { return API_BASE + path; }
-    async function api(path, options = {}) {
-      if (!API_BASE) throw new Error("Backend not configured yet. Set YAPCORD_API_BASE when your API is ready.");
-      const response = await fetch(apiUrl(path), { credentials: "include", ...options });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || data.message || "Request failed (" + response.status + ")");
-      return data;
+    function errorMessage(error) {
+      const message = error && error.message ? error.message : "Something went wrong. Please try again.";
+      if (/invalid login credentials/i.test(message)) return "Email or password is incorrect.";
+      if (/email not confirmed/i.test(message)) return "Check your email and confirm your account before logging in.";
+      if (/row-level security|permission denied|not allowed/i.test(message)) return "Supabase blocked this action. Check the database and Storage policies.";
+      return message;
     }
     function openModal(id) { document.getElementById(id).classList.add("open"); }
     function closeModal(id) { document.getElementById(id).classList.remove("open"); }
@@ -526,38 +526,57 @@
       document.getElementById("logout-button").classList.toggle("hidden", !signedIn);
     }
     async function checkSession() {
-      if (!API_BASE) return;
-      try {
-        const data = await api("/api/auth/me");
-        currentUser = data.user || null;
-        updateAuthButtons();
-      } catch (_) { currentUser = null; updateAuthButtons(); }
+      const { data, error } = await supabase.auth.getUser();
+      currentUser = error ? null : data.user;
+      updateAuthButtons();
     }
+    supabase.auth.onAuthStateChange((_event, session) => {
+      currentUser = session ? session.user : null;
+      updateAuthButtons();
+    });
+
     document.getElementById("auth-form").addEventListener("submit", async event => {
       event.preventDefault();
       const submit = document.getElementById("auth-submit");
       submit.disabled = true;
+      const email = document.getElementById("auth-email").value.trim();
+      const password = document.getElementById("auth-password").value;
       try {
-        const payload = {
-          email: document.getElementById("auth-email").value.trim(),
-          password: document.getElementById("auth-password").value
-        };
-        if (authMode === "signup") payload.username = document.getElementById("auth-username").value.trim();
-        const data = await api("/api/auth/" + (authMode === "signup" ? "signup" : "login"), {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
-        });
-        currentUser = data.user || null;
-        updateAuthButtons();
-        closeModal("auth-modal");
-        toast(authMode === "signup" ? "Account created!" : "Logged in!");
-        loadCommunityThemes();
-      } catch (error) { toast(error.message); }
-      finally { submit.disabled = false; }
+        if (authMode === "signup") {
+          const username = document.getElementById("auth-username").value.trim();
+          const { data, error } = await supabase.auth.signUp({
+            email, password,
+            options: { data: { username } }
+          });
+          if (error) throw error;
+          currentUser = data.user && data.session ? data.user : null;
+          updateAuthButtons();
+          closeModal("auth-modal");
+          toast(data.session ? "Account created!" : "Account created! Check your email to confirm it, then log in.");
+        } else {
+          const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+          if (error) throw error;
+          currentUser = data.user;
+          updateAuthButtons();
+          closeModal("auth-modal");
+          toast("Logged in!");
+        }
+        await loadCommunityThemes();
+      } catch (error) {
+        toast(errorMessage(error));
+      } finally {
+        submit.disabled = false;
+      }
     });
+
     async function logout() {
-      try { await api("/api/auth/logout", { method: "POST" }); currentUser = null; updateAuthButtons(); toast("Logged out."); }
-      catch (error) { toast(error.message); }
+      const { error } = await supabase.auth.signOut();
+      if (error) { toast(errorMessage(error)); return; }
+      currentUser = null;
+      updateAuthButtons();
+      toast("Logged out.");
     }
+
     function validateThemeFile(file) {
       if (!file) throw new Error("Choose a .theme.css file first.");
       if (!file.name.toLowerCase().endsWith(".theme.css")) throw new Error("The filename must end with .theme.css.");
@@ -580,8 +599,9 @@
         const a = document.createElement("a"); a.href = url; a.download = file.name; a.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
         toast("Theme validated. Downloaded a copy.");
-      } catch (error) { toast(error.message); }
+      } catch (error) { toast(errorMessage(error)); }
     }
+
     document.getElementById("upload-form").addEventListener("submit", async event => {
       event.preventDefault();
       const submit = document.getElementById("upload-submit");
@@ -589,39 +609,69 @@
       try {
         const file = validateThemeFile(document.getElementById("theme-file").files[0]);
         await readThemeFile(file);
-        if (!currentUser) { closeModal("upload-modal"); openAuth("login"); toast("Log in before uploading a community theme."); return; }
-        const form = new FormData();
-        form.append("file", file);
-        form.append("name", document.getElementById("upload-name").value.trim());
-        form.append("description", document.getElementById("upload-description").value.trim());
-        await api("/api/themes", { method: "POST", body: form });
+        if (!currentUser) {
+          closeModal("upload-modal");
+          openAuth("login");
+          toast("Log in before uploading a community theme.");
+          return;
+        }
+        const name = document.getElementById("upload-name").value.trim();
+        const description = document.getElementById("upload-description").value.trim();
+        const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const storagePath = currentUser.id + "/" + crypto.randomUUID() + "-" + safeFileName;
+        const { error: storageError } = await supabase.storage
+          .from("themes")
+          .upload(storagePath, file, { contentType: "text/css", upsert: false });
+        if (storageError) throw storageError;
+        const { data: publicData } = supabase.storage.from("themes").getPublicUrl(storagePath);
+        const { error: insertError } = await supabase.from("themes").insert({
+          name,
+          description,
+          author_id: currentUser.id,
+          file_url: publicData.publicUrl
+        });
+        if (insertError) throw insertError;
         closeModal("upload-modal");
         document.getElementById("upload-form").reset();
         toast("Theme uploaded to the community!");
         switchTab("community");
-      } catch (error) { toast(error.message); }
-      finally { submit.disabled = false; }
+      } catch (error) {
+        toast(errorMessage(error));
+      } finally {
+        submit.disabled = false;
+      }
     });
+
     async function loadCommunityThemes() {
       const list = document.getElementById("community-list");
-      if (!API_BASE) {
-        list.innerHTML = '<div class="empty"><div class="empty-icon">✦</div><h3>Backend needed for community uploads</h3><p>Once you add a backend, set <code>YAPCORD_API_BASE</code> and community themes will load here.</p></div>';
+      list.innerHTML = '<div class="empty"><h3>Loading themes…</h3><p>Fetching community uploads.</p></div>';
+      const { data, error } = await supabase
+        .from("themes")
+        .select("id,name,description,file_url,created_at")
+        .order("created_at", { ascending: false });
+      if (error) {
+        list.innerHTML = '<div class="empty"><h3>Could not load themes</h3><p></p></div>';
+        list.querySelector("p").textContent = errorMessage(error) + " Make sure the themes table and its read policy exist.";
         return;
       }
-      list.innerHTML = '<div class="empty"><h3>Loading themes…</h3><p>Fetching community uploads.</p></div>';
-      try {
-        const data = await api("/api/themes");
-        communityThemes = Array.isArray(data.themes) ? data.themes : [];
-        renderCommunityThemes();
-      } catch (error) {
-        list.innerHTML = '<div class="empty"><h3>Could not load themes</h3><p></p></div>';
-        list.querySelector("p").textContent = error.message;
-      }
+      communityThemes = (data || []).map(theme => ({
+        id: theme.id,
+        name: theme.name,
+        description: theme.description,
+        author: "Community member",
+        downloadUrl: theme.file_url
+      }));
+      renderCommunityThemes();
     }
+
     function renderCommunityThemes() {
       const list = document.getElementById("community-list");
       const query = document.getElementById("theme-search").value.trim().toLowerCase();
-      const filtered = communityThemes.filter(theme => (theme.name || "").toLowerCase().includes(query) || (theme.description || "").toLowerCase().includes(query) || (theme.author || "").toLowerCase().includes(query));
+      const filtered = communityThemes.filter(theme =>
+        (theme.name || "").toLowerCase().includes(query) ||
+        (theme.description || "").toLowerCase().includes(query) ||
+        (theme.author || "").toLowerCase().includes(query)
+      );
       if (!filtered.length) {
         list.innerHTML = '<div class="empty"><div class="empty-icon">✦</div><h3>No themes found</h3><p>Be the first to share a .theme.css file.</p></div>';
         return;
@@ -631,11 +681,12 @@
         const card = document.createElement("article"); card.className = "card community-card";
         const title = document.createElement("div"); title.className = "theme-name"; title.textContent = theme.name || "Untitled theme";
         const badge = document.createElement("span"); badge.className = "badge"; badge.textContent = "Community"; title.appendChild(badge);
-        const desc = document.createElement("p"); desc.className = "theme-desc"; desc.textContent = (theme.description || "No description provided.") + " · by " + (theme.author || "Community member");
+        const desc = document.createElement("p"); desc.className = "theme-desc";
+        desc.textContent = (theme.description || "No description provided.") + " · by " + (theme.author || "Community member");
         const actions = document.createElement("div"); actions.className = "card-actions";
         const download = document.createElement("a"); download.className = "btn btn-primary"; download.textContent = "Download .theme.css";
-        download.href = theme.downloadUrl || theme.download_url || "#"; download.target = "_blank"; download.rel = "noopener noreferrer";
-        if (download.href.endsWith("#")) download.addEventListener("click", e => { e.preventDefault(); toast("This theme does not have a download URL."); });
+        download.href = theme.downloadUrl || "#"; download.target = "_blank"; download.rel = "noopener noreferrer";
+        if (!theme.downloadUrl) download.addEventListener("click", e => { e.preventDefault(); toast("This theme does not have a download URL."); });
         actions.appendChild(download); card.append(title, desc, actions); list.appendChild(card);
       });
     }
